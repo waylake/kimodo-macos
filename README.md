@@ -1,3 +1,5 @@
+> **macOS / Apple Silicon fork** — builds and runs on M-series Macs (MPS, optional 8-bit text encoder). See [README_MACOS.md](README_MACOS.md).
+
 <p align="center">
   <img src="./assets/banner.png" alt="Banner" width="100%">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-76B900.svg" alt="License"></a>

@@ -6,7 +6,11 @@
 #pragma once
 
 #include <stdint.h>
+#if defined(__aarch64__) || defined(__arm64__)
+#include "sse2neon.h"
+#else
 #include <immintrin.h>
+#endif
 
 namespace SIMD
 {

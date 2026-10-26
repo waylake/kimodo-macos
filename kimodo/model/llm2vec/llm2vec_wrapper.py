@@ -43,6 +43,13 @@ class LLM2VecEncoder:
         if device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self._device = device
+        if os.environ.get("KIMODO_TE_8BIT"):
+            # Optional weight-only int8 quantization (optimum-quanto) to roughly halve the
+            # text encoder's memory (~16 GB bf16 -> ~8.5 GB). Useful on Apple Silicon / small GPUs.
+            from optimum.quanto import freeze, qint8, quantize
+
+            quantize(self.model.model, weights=qint8)
+            freeze(self.model.model)
         if device is not None:
             self.model = self.model.to(device)
 
