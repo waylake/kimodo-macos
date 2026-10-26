@@ -9,6 +9,7 @@ build, adds Apple GPU (MPS) selection, and adds an optional 8-bit text encoder s
 unified memory.
 
 Tested on: MacBook Pro M1 Max (64 GB), macOS 27, Python 3.12, PyTorch 2.14.1 (MPS), model `Kimodo-SOMA-RP-v1.2`.
+Measured: a 4-second clip with BVH export in **27.5 s**, generator peak memory **2.6 GB** (text encoder running as a separate 8-bit service).
 
 ## What changed (vs. upstream `main`)
 
@@ -20,7 +21,8 @@ Tested on: MacBook Pro M1 Max (64 GB), macOS 27, Python 3.12, PyTorch 2.14.1 (MP
 | `MotionCorrection/src/cpp/Math/Vector.inl` | `_mm_permutevar_ps` is AVX-only (not covered by sse2neon): scalar 4-lane permute on ARM, original intrinsic on x86 |
 | `MotionCorrection/src/cpp/Compiler.h` | `FORCE_INLINE` was defined for MSVC and GCC but not Clang → define it for Clang too |
 | `MotionCorrection/src/cpp/Math/Scalar.h` | Add missing `<stdlib.h>` (`labs`/`llabs`) — worked on Linux only via transitive includes |
-| `kimodo/scripts/generate.py` | Device selection: `cuda` → **`mps`** → `cpu` |
+| `kimodo/scripts/generate.py` | Device selection: `cuda` → **`mps`** → `cpu`; BVH export runs on CPU when the model is on MPS (the SOMA skeleton holds float64 buffers) |
+| `kimodo/model/kimodo_model.py` | On MPS, cast float64 buffers (diffusion schedules) to float32 before `.to(device)` — MPS has no float64 |
 | `kimodo/model/llm2vec/llm2vec_wrapper.py` | Optional `KIMODO_TE_8BIT=1`: weight-only int8 quantization of the LLM2Vec text encoder via `optimum-quanto` (~16 GB → ~8.5 GB) |
 
 x86/CUDA behavior is unchanged: every change is either ARM-guarded or opt-in.
@@ -43,7 +45,8 @@ then generate as many clips as you like:
 
 ```bash
 export PYTORCH_ENABLE_MPS_FALLBACK=1
-KIMODO_TE_8BIT=1 TEXT_ENCODER_DEVICE=mps kimodo_textencoder &     # serves on 127.0.0.1:9550
+GRADIO_ALLOWED_PATHS=/tmp/text_encoder,/private/tmp/text_encoder \
+  KIMODO_TE_8BIT=1 TEXT_ENCODER_DEVICE=mps kimodo_textencoder &     # serves on 127.0.0.1:9550
 
 kimodo_gen "A person standing completely still slowly turns only the head toward the camera, then freezes." \
   --model Kimodo-SOMA-RP-v1.2 --duration 4 --num_samples 3 --bvh --output out/head_turn
@@ -70,6 +73,7 @@ Generated motion clips contain neither model.
 - **Python 3.10:** the SciPy wheels that support 3.10 (≤ 1.15) fail to load on recent macOS
   (`section '__DATA/__thread_bss' has a zero-fill section type`). Use Python 3.11+ (SciPy ≥ 1.16).
 - Some ops fall back to CPU on MPS; keep `PYTORCH_ENABLE_MPS_FALLBACK=1`.
+- On macOS the encoder service writes to `/tmp/text_encoder`, which Gradio rejects (macOS temp is under `/var/folders`, and `/tmp` resolves to `/private/tmp`). Without `GRADIO_ALLOWED_PATHS` the client silently falls back to loading the full encoder in-process (~16 GB, every run).
 - 8-bit encoding slightly shifts the text embeddings the diffusion model was trained on. Prefer full bf16 when memory
   allows (64 GB Macs can run it unquantized: omit `KIMODO_TE_8BIT`).
 

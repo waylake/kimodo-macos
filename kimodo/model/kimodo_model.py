@@ -55,6 +55,12 @@ class Kimodo(nn.Module):
         self.device = device
         # for classifier-free guidance
 
+        if str(device).startswith("mps"):
+            # MPS has no float64: cast double buffers (e.g. diffusion schedules) before moving.
+            for module in self.modules():
+                for name, buf in module._buffers.items():
+                    if buf is not None and buf.dtype == torch.float64:
+                        module._buffers[name] = buf.float()
         self.to(device)
 
     @property
